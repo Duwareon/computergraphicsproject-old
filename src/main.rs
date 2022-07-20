@@ -1,5 +1,6 @@
 use log::error;
 use pixels::{Error, Pixels, SurfaceTexture};
+use std::mem::swap;
 use std::time::Instant;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
@@ -32,7 +33,7 @@ fn heart(i: i32) -> i32 {
 
 fn interpolate(i0: u32, d0: f32, i1: u32, d1: f32) -> Vec<f32> {
     if !(i0 == i1) {
-        let mut values = Vec::new();
+        let mut values: Vec<f32> = Vec::new();
         let a = (d1 - d0) / (i1 - i0) as f32;
         let mut d = d0;
         for i in i0..i1 {
@@ -51,24 +52,21 @@ fn draw_line(p0: [i32; 2], p1: [i32; 2], col: [u8; 4], frame: &mut [u8]) {
     let mut x1 = p1[0];
     let mut y1 = p1[1];
 
-    println!("C");
     if (x1 - x0).abs() > (y1 - y0).abs() {
-        println!("A");
         // Make sure x0 < x1
         if x0 > x1 {
-            std::mem::swap(&mut x0, &mut x1);
-            std::mem::swap(&mut y0, &mut y1);
+            swap(&mut x0, &mut x1);
+            swap(&mut y0, &mut y1);
         }
         let ys = interpolate(x0 as u32, y0 as f32, x1 as u32, y1 as f32);
         for x in x0..x1 {
             put_pixel(x as u32, ys[(x - x0) as usize] as u32, col, frame);
         }
     } else {
-        println!("B");
         // Make sure y0 < y1
         if y0 > y1 {
-            std::mem::swap(&mut x0, &mut x1);
-            std::mem::swap(&mut y0, &mut y1);
+            swap(&mut x0, &mut x1);
+            swap(&mut y0, &mut y1);
         }
         let xs = interpolate(y0 as u32, x0 as f32, y1 as u32, x1 as f32);
         for y in y0..y1 {
@@ -83,6 +81,47 @@ fn draw_wire_triangle(p0: [i32; 2], p1: [i32; 2], p2: [i32; 2], col: [u8; 4], fr
     draw_line(p2, p0, col, frame);
 }
 
+fn draw_filled_triangle(p0: [i32; 2], p1: [i32; 2], p2: [i32; 2], col: [u8; 4], frame: &mut [u8]) {
+    let mut p0 = p0;
+    let mut p1 = p1;
+    let mut p2 = p2;
+    if p1[1] < p0[1] {
+        swap(&mut p1, &mut p0)
+    }
+    if p2[1] < p0[1] {
+        swap(&mut p2, &mut p0)
+    }
+    if p2[1] < p1[1] {
+        swap(&mut p2, &mut p1)
+    }
+
+    let mut x01 = interpolate(p0[1] as u32, p0[0] as f32, p1[1] as u32, p1[0] as f32);
+    let x12 = interpolate(p1[0] as u32, p1[0] as f32, p2[1] as u32, p2[0] as f32);
+    let x02 = interpolate(p0[1] as u32, p0[0] as f32, p2[1] as u32, p2[0] as f32);
+    x01.pop();
+
+    let x012 = vec![x01, x12].concat();
+
+    let m = (x02.len() as f32 / 2.0).floor() as usize;
+
+    let x_left: Vec<f32>;
+    let x_right: Vec<f32>;
+
+    if x02[m] < x012[m] {
+        x_left = x02;
+        x_right = x012;
+    } else {
+        x_left = x012;
+        x_right = x02;
+    }
+
+    for y in p0[1]..p2[1] {
+        for x in x_left[(y - p0[1]) as usize] as u32..x_right[(y - p0[1]) as usize] as u32 {
+            put_pixel(x as u32, y as u32, col, frame);
+        }
+    }
+}
+
 fn clear(frame: &mut [u8]) {
     frame.iter_mut().for_each(|m| *m = 0);
 }
@@ -91,7 +130,7 @@ fn draw(frame: &mut [u8], time: Instant) {
     //let now = Instant::now();
     //let elapsed = now.duration_since(time).subsec_millis();
     clear(frame);
-    draw_wire_triangle([100, 100], [200, 100], [50, 400], [0xff; 4], frame);
+    draw_filled_triangle([100, 125], [200, 100], [150, 400], [0xff; 4], frame);
 }
 
 fn main() -> Result<(), Error> {
