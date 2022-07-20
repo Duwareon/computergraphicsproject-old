@@ -1,3 +1,4 @@
+extern crate bitfont;
 use log::error;
 use pixels::{Error, Pixels, SurfaceTexture};
 use std::mem::swap;
@@ -31,12 +32,33 @@ fn heart(i: i32) -> i32 {
         as i32;
 }*/
 
+fn draw_text(p: [u32; 2], text: &str, col: [u8; 4], frame: &mut [u8]) {
+    let texts = text.split("\n");
+    let mut xd = 0;
+    let mut yd = 0;
+    for text in texts {
+        let bitvec = bitfont::bitmap_bool(text).unwrap();
+
+        for row in bitvec {
+            for charac in row {
+                if charac {
+                    put_pixel(p[0] + xd, p[1] + yd, col, frame);
+                }
+                xd += 1;
+            }
+            yd += 1;
+            xd = 0;
+        }
+        yd += 1;
+    }
+}
+
 fn interpolate(i0: u32, d0: f32, i1: u32, d1: f32) -> Vec<f32> {
     if !(i0 == i1) {
         let mut values: Vec<f32> = Vec::new();
         let a = (d1 - d0) / (i1 - i0) as f32;
         let mut d = d0;
-        for i in i0..i1 {
+        for _ in i0..i1 {
             values.push(d);
             d = d + a;
         }
@@ -127,10 +149,47 @@ fn clear(frame: &mut [u8]) {
 }
 
 fn draw(frame: &mut [u8], time: Instant) {
-    //let now = Instant::now();
-    //let elapsed = now.duration_since(time).subsec_millis();
+    let now = Instant::now();
+    let elapsed = now.duration_since(time).subsec_millis();
     clear(frame);
-    draw_filled_triangle([100, 125], [200, 100], [150, 400], [0xff; 4], frame);
+    draw_filled_triangle(
+        [100, 125],
+        [200, 100],
+        [150, 400],
+        [0xff, 0x60, 0x4f, 0xff],
+        frame,
+    );
+    draw_filled_triangle(
+        [125, 50],
+        [20, 70],
+        [120, 440],
+        [0x00, 0x80, 0x8f, 0xff],
+        frame,
+    );
+    draw_filled_triangle(
+        [200, 225],
+        [300 - (elapsed % 200) as i32, 200],
+        [250, 300],
+        [0x00, 0x30, 0x00, 0xff],
+        frame,
+    );
+
+    draw_wire_triangle(
+        [400, 400],
+        [450, 80],
+        [500, 420],
+        [0xa0, 0xb0, 0x00, 0xff],
+        frame,
+    );
+
+    draw_line([410, 450], [490, 70], [0x40, 0x17, 0xc0, 0xff], frame);
+
+    draw_text(
+        [200, 300],
+        "poggers\npogchamp",
+        [0xff, 0x00, 0xff, 0xff],
+        frame,
+    )
 }
 
 fn main() -> Result<(), Error> {
@@ -159,17 +218,21 @@ fn main() -> Result<(), Error> {
 
     let time: Instant = Instant::now();
 
-    //let mut frametime: Instant = Instant::now();
+    let mut frametime: Instant = Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
         // Draw the current frame
         if let Event::RedrawRequested(_) = event {
-            /*println!(
-                "{}",
-                Instant::now().duration_since(frametime).subsec_millis()
-            );
-            frametime = Instant::now();*/
+            let timeframe = Instant::now().duration_since(frametime).subsec_millis();
+            //println!("{}", timeframe);
+            frametime = Instant::now();
             draw(pixels.get_frame(), time);
+            draw_text(
+                [50, 50],
+                &timeframe.to_string(),
+                [0xff; 4],
+                pixels.get_frame(),
+            );
 
             if pixels
                 .render()
@@ -194,7 +257,7 @@ fn main() -> Result<(), Error> {
                 pixels.resize_surface(size.width, size.height);
             }
 
-            //window.request_redraw();
+            window.request_redraw();
         }
     });
 }
