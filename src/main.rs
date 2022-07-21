@@ -38,7 +38,6 @@ fn draw_text(p: [u32; 2], text: &str, col: [u8; 4], frame: &mut [u8]) {
     let mut yd = 0;
     for text in texts {
         let bitvec = bitfont::bitmap_bool(text).unwrap();
-
         for row in bitvec {
             for charac in row {
                 if charac {
@@ -54,18 +53,17 @@ fn draw_text(p: [u32; 2], text: &str, col: [u8; 4], frame: &mut [u8]) {
 }
 
 fn interpolate(i0: u32, d0: f32, i1: u32, d1: f32) -> Vec<f32> {
-    if !(i0 == i1) {
-        let mut values: Vec<f32> = Vec::new();
-        let a = (d1 - d0) / (i1 - i0) as f32;
-        let mut d = d0;
-        for _ in i0..i1 {
-            values.push(d);
-            d = d + a;
-        }
-        return values;
-    } else {
+    if i0 == i1 {
         return vec![d0];
     }
+    let mut values = Vec::new();
+    let a = (d1 - d0) / (i1 - i0) as f32;
+    let mut d = d0;
+    for i in i0..i1 {
+        values.push(d);
+        d = d + a;
+    }
+    return values;
 }
 
 fn draw_line(p0: [i32; 2], p1: [i32; 2], col: [u8; 4], frame: &mut [u8]) {
@@ -117,14 +115,15 @@ fn draw_filled_triangle(p0: [i32; 2], p1: [i32; 2], p2: [i32; 2], col: [u8; 4], 
         swap(&mut p2, &mut p1)
     }
 
-    let mut x01 = interpolate(p0[1] as u32, p0[0] as f32, p1[1] as u32, p1[0] as f32);
-    let x12 = interpolate(p1[0] as u32, p1[0] as f32, p2[1] as u32, p2[0] as f32);
+    let mut x012 = interpolate(p0[1] as u32, p0[0] as f32, p1[1] as u32, p1[0] as f32);
+    x012.pop();
+    let mut x12 = interpolate(p1[1] as u32, p1[0] as f32, p2[1] as u32, p2[0] as f32);
     let x02 = interpolate(p0[1] as u32, p0[0] as f32, p2[1] as u32, p2[0] as f32);
-    x01.pop();
+    //x01.pop();
 
-    let x012 = vec![x01, x12].concat();
+    x012.append(&mut x12);
 
-    let m = (x02.len() as f32 / 2.0).floor() as usize;
+    let m = (x012.len() as f32 / 2.0).floor() as usize;
 
     let x_left: Vec<f32>;
     let x_right: Vec<f32>;
@@ -138,7 +137,9 @@ fn draw_filled_triangle(p0: [i32; 2], p1: [i32; 2], p2: [i32; 2], col: [u8; 4], 
     }
 
     for y in p0[1]..p2[1] {
-        for x in x_left[(y - p0[1]) as usize] as u32..x_right[(y - p0[1]) as usize] as u32 {
+        for x in (x_left[(y - p0[1]).min((x_left.len() - 1) as i32) as usize].floor() as i32)
+            ..(x_right[(y - p0[1]).min((x_right.len() - 1) as i32) as usize].floor() as i32)
+        {
             put_pixel(x as u32, y as u32, col, frame);
         }
     }
@@ -167,13 +168,19 @@ fn draw(frame: &mut [u8], time: Instant) {
         frame,
     );
     draw_filled_triangle(
-        [200, 225],
+        [200 - (elapsed % 200) as i32, 225],
         [300 - (elapsed % 200) as i32, 200],
-        [250, 300],
-        [0x00, 0x30, 0x00, 0xff],
+        [250 - (elapsed % 200) as i32, 300],
+        [0x00, 0x70, 0x00, 0xff],
         frame,
     );
-
+    draw_wire_triangle(
+        [200 - (elapsed % 200) as i32, 225],
+        [300 - (elapsed % 200) as i32, 200],
+        [250 - (elapsed % 200) as i32, 300],
+        [0xff, 0xff, 0xff, 0xff],
+        frame,
+    );
     draw_wire_triangle(
         [400, 400],
         [450, 80],
@@ -184,12 +191,12 @@ fn draw(frame: &mut [u8], time: Instant) {
 
     draw_line([410, 450], [490, 70], [0x40, 0x17, 0xc0, 0xff], frame);
 
-    draw_text(
+    /*draw_text(
         [200, 300],
         "poggers\npogchamp",
         [0xff, 0x00, 0xff, 0xff],
         frame,
-    )
+    )*/
 }
 
 fn main() -> Result<(), Error> {
@@ -257,7 +264,7 @@ fn main() -> Result<(), Error> {
                 pixels.resize_surface(size.width, size.height);
             }
 
-            window.request_redraw();
+            //window.request_redraw();
         }
     });
 }
