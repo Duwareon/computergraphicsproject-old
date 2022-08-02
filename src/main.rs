@@ -2,7 +2,7 @@ extern crate bitfont;
 use log::error;
 use pixels::{Error, Pixels, SurfaceTexture};
 use std::mem::swap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -59,7 +59,7 @@ fn interpolate(i0: u32, d0: f32, i1: u32, d1: f32) -> Vec<f32> {
     let mut values = Vec::new();
     let a = (d1 - d0) / (i1 - i0) as f32;
     let mut d = d0;
-    for i in i0..i1 {
+    for _ in i0..i1 {
         values.push(d);
         d = d + a;
     }
@@ -136,23 +136,22 @@ fn draw_filled_triangle(p0: [i32; 2], p1: [i32; 2], p2: [i32; 2], col: [u8; 4], 
         x_right = x02;
     }
 
-    for y in p0[1]..p2[1] {
-        for x in (x_left[(y - p0[1]).min((x_left.len() - 1) as i32) as usize].floor() as i32)
-            ..(x_right[(y - p0[1]).min((x_right.len() - 1) as i32) as usize].floor() as i32)
+    for y in p0[1]..p2[1] - 1 {
+        for x in
+            (x_left[(y - p0[1]) as usize] as i32)..(x_right[(y - p0[1]) as usize].floor() as i32)
         {
             put_pixel(x as u32, y as u32, col, frame);
         }
     }
 }
 
-fn clear(frame: &mut [u8]) {
-    frame.iter_mut().for_each(|m| *m = 0);
+fn clear(col: [u8; 4], frame: &mut [u8]) {
+    for (_, pixel) in frame.chunks_exact_mut(4).enumerate() {
+        pixel.copy_from_slice(col.as_slice());
+    }
 }
 
-fn draw(frame: &mut [u8], time: Instant) {
-    let now = Instant::now();
-    let elapsed = now.duration_since(time).subsec_millis();
-    clear(frame);
+fn draw_test(frame: &mut [u8], time: Duration, timesincelastframe: Duration) {
     draw_filled_triangle(
         [100, 125],
         [200, 100],
@@ -168,19 +167,20 @@ fn draw(frame: &mut [u8], time: Instant) {
         frame,
     );
     draw_filled_triangle(
-        [200 - (elapsed % 200) as i32, 225],
-        [300 - (elapsed % 200) as i32, 200],
-        [250 - (elapsed % 200) as i32, 300],
+        [200, 225],
+        [300, 200],
+        [250, 300],
         [0x00, 0x70, 0x00, 0xff],
         frame,
     );
     draw_wire_triangle(
-        [200 - (elapsed % 200) as i32, 225],
-        [300 - (elapsed % 200) as i32, 200],
-        [250 - (elapsed % 200) as i32, 300],
+        [200, 225],
+        [300, 200],
+        [250, 300],
         [0xff, 0xff, 0xff, 0xff],
         frame,
     );
+
     draw_wire_triangle(
         [400, 400],
         [450, 80],
@@ -191,12 +191,25 @@ fn draw(frame: &mut [u8], time: Instant) {
 
     draw_line([410, 450], [490, 70], [0x40, 0x17, 0xc0, 0xff], frame);
 
-    /*draw_text(
-        [200, 300],
+    draw_text(
+        [200, 270],
         "poggers\npogchamp",
         [0xff, 0x00, 0xff, 0xff],
         frame,
-    )*/
+    );
+}
+
+fn draw(frame: &mut [u8], time: Duration, timesincelastframe: Duration) {
+    clear([0x00u8; 4], frame);
+    draw_test(frame, time, timesincelastframe);
+
+    // Draw debug text for frame time
+    draw_text(
+        [50, 50],
+        &((timesincelastframe.as_nanos() / 10000).to_string()),
+        [0xff; 4],
+        frame,
+    );
 }
 
 fn main() -> Result<(), Error> {
@@ -223,23 +236,19 @@ fn main() -> Result<(), Error> {
         Pixels::new(WIDTH, HEIGHT, surface_texture)?
     };
 
-    let time: Instant = Instant::now();
-
     let mut frametime: Instant = Instant::now();
+    let starttime: Instant = Instant::now();
 
     event_loop.run(move |event, _, control_flow| {
         // Draw the current frame
         if let Event::RedrawRequested(_) = event {
-            let timeframe = Instant::now().duration_since(frametime).subsec_millis();
-            //println!("{}", timeframe);
-            frametime = Instant::now();
-            draw(pixels.get_frame(), time);
-            draw_text(
-                [50, 50],
-                &timeframe.to_string(),
-                [0xff; 4],
+            let now = Instant::now();
+            draw(
                 pixels.get_frame(),
+                now.duration_since(starttime),
+                now.duration_since(frametime),
             );
+            frametime = Instant::now();
 
             if pixels
                 .render()
@@ -250,7 +259,6 @@ fn main() -> Result<(), Error> {
                 return;
             }
         }
-
         // Handle input events
         if input.update(&event) {
             // Close events
@@ -264,7 +272,7 @@ fn main() -> Result<(), Error> {
                 pixels.resize_surface(size.width, size.height);
             }
 
-            //window.request_redraw();
+            window.request_redraw();
         }
     });
 }
