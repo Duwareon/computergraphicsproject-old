@@ -115,8 +115,7 @@ fn draw_filled_triangle(p0: [i32; 2], p1: [i32; 2], p2: [i32; 2], col: [u8; 4], 
         swap(&mut p2, &mut p1)
     }
 
-    let mut x012 = interpolate(p0[1] as u32, p0[0] as f32, p1[1] as u32, p1[0] as f32);
-    x012.pop();
+    let mut x012 = interpolate(p0[1] as u32, p0[0] as f32, p1[1] as u32, p1[0] as f32); x012.pop();
     let mut x12 = interpolate(p1[1] as u32, p1[0] as f32, p2[1] as u32, p2[0] as f32);
     let x02 = interpolate(p0[1] as u32, p0[0] as f32, p2[1] as u32, p2[0] as f32);
     //x01.pop();
@@ -145,13 +144,80 @@ fn draw_filled_triangle(p0: [i32; 2], p1: [i32; 2], p2: [i32; 2], col: [u8; 4], 
     }
 }
 
+fn draw_shaded_triangle(p0: [i32; 2], p1: [i32; 2], p2: [i32; 2], col: [u8; 4], h: [f32; 3],frame: &mut [u8]) {
+    let mut p0 = p0;
+    let mut p1 = p1;
+    let mut p2 = p2;
+    if p1[1] < p0[1] {
+        swap(&mut p1, &mut p0)
+    }
+    if p2[1] < p0[1] {
+        swap(&mut p2, &mut p0)
+    }
+    if p2[1] < p1[1] {
+        swap(&mut p2, &mut p1)
+    }
+    let h0 = h[0];
+    let h1 = h[1];
+    let h2 = h[2];
+
+    let mut x012 = interpolate(p0[1] as u32, p0[0] as f32, p1[1] as u32, p1[0] as f32); x012.pop();
+    let mut h012 = interpolate(p0[1] as u32, h0, p1[1] as u32, h1); h012.pop();
+
+    let mut x12 = interpolate(p1[1] as u32, p1[0] as f32, p2[1] as u32, p2[0] as f32);
+    let mut h12 = interpolate(p1[1] as u32, h1, p2[1] as u32,h2);
+
+    let x02 = interpolate(p0[1] as u32, p0[0] as f32, p2[1] as u32, p2[0] as f32);
+    let h02 = interpolate(p0[1] as u32, h0, p2[1] as u32, h2);
+
+    x012.append(&mut x12);
+    h012.append(&mut h12);
+
+    let m = (x012.len() as f32 / 2.0).floor() as usize;
+
+    let x_left: Vec<f32>;
+    let x_right: Vec<f32>;
+    let h_left: Vec<f32>;
+    let h_right: Vec<f32>;
+    
+    if x02[m] < x012[m] {
+        x_left = x02;
+        h_left = h02;
+
+        x_right = x012;
+        h_right = h012;
+    }
+    else {
+        x_left = x012;
+        h_left = h012;
+
+        x_right = x02;
+        h_right = h02;
+    }
+
+    for y in p0[1] as u32..(p2[1] - 1) as u32{
+        let n = (y-p0[1] as u32) as usize;
+        let x_l = x_left[n] as u32;
+        let x_r = x_right[n] as u32;
+        
+        let h_segment = interpolate(x_l, h_left[n],
+                                    x_r, h_right[n]);
+
+        for x in x_l..x_r {
+            let i = h_segment[(x-x_l) as usize];
+            let shaded_color = [col[0], col[1], col[2], (col[3] as f32* i) as u8];//col * h_segment[ x - x_l ];
+            put_pixel(x, y, shaded_color, frame);
+        }
+    }
+}
+
 fn clear(col: [u8; 4], frame: &mut [u8]) {
     for (_, pixel) in frame.chunks_exact_mut(4).enumerate() {
         pixel.copy_from_slice(col.as_slice());
     }
 }
 
-fn draw_test(frame: &mut [u8], time: Duration, timesincelastframe: Duration) {
+fn draw_test(frame: &mut [u8], _time: Duration, _timesincelastframe: Duration) {
     draw_filled_triangle(
         [100, 125],
         [200, 100],
@@ -189,7 +255,10 @@ fn draw_test(frame: &mut [u8], time: Duration, timesincelastframe: Duration) {
         frame,
     );
 
+
     draw_line([410, 450], [490, 70], [0x40, 0x17, 0xc0, 0xff], frame);
+
+    draw_shaded_triangle([200, 150], [350, 250], [300, 400], [0x00, 0xff, 0x00, 0xff], [0.01, 0.1, 1.0], frame);
 
     draw_text(
         [200, 270],
@@ -201,6 +270,7 @@ fn draw_test(frame: &mut [u8], time: Duration, timesincelastframe: Duration) {
 
 fn draw(frame: &mut [u8], time: Duration, timesincelastframe: Duration) {
     clear([0x00u8; 4], frame);
+    
     draw_test(frame, time, timesincelastframe);
 
     // Draw debug text for frame time
