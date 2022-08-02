@@ -211,13 +211,73 @@ fn draw_shaded_triangle(p0: [i32; 2], p1: [i32; 2], p2: [i32; 2], col: [u8; 4], 
     }
 }
 
+trait Shape {
+    fn render_wire(&self, frame: &mut[u8]);
+    fn render(&self, frame: &mut[u8]);
+    fn translate(&mut self, x: i32, y: i32, z: i32);
+}
+
+struct Triangle2d {
+    p0: [i32; 2],
+    p1: [i32; 2],
+    p2: [i32; 2],
+    col: [u8; 4],
+    h: [f32; 3],
+}
+
+impl Shape for Triangle2d {
+    fn render_wire(&self, frame: &mut[u8]) {
+        draw_wire_triangle(self.p0, self.p1, self.p2, self.col, frame);
+    }
+    
+    fn render(&self, frame: &mut [u8]) {
+        draw_shaded_triangle(self.p0, self.p1, self.p2, self.col, self.h, frame);
+    }
+
+    fn translate(&mut self, x: i32, y: i32, z:i32) {
+        self.p0[0] += x;
+        self.p1[0] += x;
+        self.p2[0] += x;
+
+        self.p0[1] += y;
+        self.p1[1] += y;
+        self.p2[1] += y;
+        
+    }
+}
+
+struct World {
+    shapes: Vec<Box<dyn Shape>>,
+}
+
+impl World {
+    fn render(&self, frame:  &mut [u8]) {
+        for s in &self.shapes {
+            s.render(frame);
+        }
+    }
+
+    pub fn new(_shapes: Vec<Box<dyn Shape>>) -> Self {
+        return World {shapes: _shapes}
+    }
+
+    pub fn update(&mut self, delta: Duration) {
+        let movement = (1 as f32 + delta.as_secs_f32()*10.0) as i32;
+        self.shapes[0].translate(movement, 0, 0)
+    }
+}
+
+fn draw_3d_world(world: &World, frame: &mut [u8]) {
+    world.render(frame);
+}
+
 fn clear(col: [u8; 4], frame: &mut [u8]) {
     for (_, pixel) in frame.chunks_exact_mut(4).enumerate() {
         pixel.copy_from_slice(col.as_slice());
     }
 }
 
-fn draw_test(frame: &mut [u8], _time: Duration, _timesincelastframe: Duration) {
+fn draw_test(frame: &mut [u8], world: &World, _time: Duration, _timesincelastframe: Duration) {
     draw_filled_triangle(
         [100, 125],
         [200, 100],
@@ -255,6 +315,7 @@ fn draw_test(frame: &mut [u8], _time: Duration, _timesincelastframe: Duration) {
         frame,
     );
 
+    draw_3d_world(world, frame);
 
     draw_line([410, 450], [490, 70], [0x40, 0x17, 0xc0, 0xff], frame);
 
@@ -268,10 +329,10 @@ fn draw_test(frame: &mut [u8], _time: Duration, _timesincelastframe: Duration) {
     );
 }
 
-fn draw(frame: &mut [u8], time: Duration, timesincelastframe: Duration) {
+fn draw(frame: &mut [u8], world: &World, time: Duration, timesincelastframe: Duration) {
     clear([0x00u8; 4], frame);
     
-    draw_test(frame, time, timesincelastframe);
+    draw_test(frame, world, time, timesincelastframe);
 
     // Draw debug text for frame time
     draw_text(
@@ -308,13 +369,23 @@ fn main() -> Result<(), Error> {
 
     let mut frametime: Instant = Instant::now();
     let starttime: Instant = Instant::now();
+    
+    let shapes: Vec<Box<dyn Shape>> = vec!(
+        Box::new(Triangle2d{p0: [10, 10], p1: [20, 10], p2: [15, 20], col: [0xff; 4], h: [0.025, 0.1, 1.0]}), 
+        Box::new(Triangle2d{p0: [30, 10], p1: [40, 10], p2: [35, 20], col: [0xff; 4], h: [0.025, 0.1, 1.0]})
+    );
+
+    let mut world = World::new(shapes);
+
 
     event_loop.run(move |event, _, control_flow| {
         // Draw the current frame
         if let Event::RedrawRequested(_) = event {
             let now = Instant::now();
+            world.update(now.duration_since(frametime));
             draw(
                 pixels.get_frame(),
+                &world,
                 now.duration_since(starttime),
                 now.duration_since(frametime),
             );
@@ -341,7 +412,7 @@ fn main() -> Result<(), Error> {
             if let Some(size) = input.window_resized() {
                 pixels.resize_surface(size.width, size.height);
             }
-
+            
             window.request_redraw();
         }
     });
